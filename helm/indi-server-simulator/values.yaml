@@ -1,0 +1,95 @@
+# Default values for indi-server-simulator
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+image:
+  repository: registry.torresj.es/indi-server-simulator
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+imagePullSecrets: regcred
+# Keep the full name fixed: the ingress-nginx TCP entry
+# (k8s/ingress-nginx-tcp.yaml) points at the Service by this name.
+nameOverride: "indi-server-simulator"
+fullnameOverride: "indi-server-simulator"
+
+# The simulators that indiserver starts, one driver each. Change them with
+#   helm upgrade ... --set simulators.dome=true
+# or with a values file such as examples/observatory.yaml. The driver behind
+# each key is set in templates/_helpers.tpl.
+simulators:
+  telescope: true             # indi_simulator_telescope
+  ccd: true                   # indi_simulator_ccd
+  focuser: true               # indi_simulator_focus
+  filterWheel: true           # indi_simulator_wheel
+  guider: false               # indi_simulator_guide
+  rotator: false              # indi_simulator_rotator
+  dome: false                 # indi_simulator_dome
+  rollOffRoof: false          # indi_rolloff_dome
+  gps: false                  # indi_simulator_gps
+  weather: false              # indi_simulator_weather
+  lightPanel: false           # indi_simulator_lightpanel
+  dustCover: false            # indi_simulator_dustcover
+  io: false                   # indi_simulator_io
+  receiver: false             # indi_simulator_receiver (spectrograph)
+  sqm: false                  # indi_simulator_sqm (sky quality meter)
+  alignmentCorrection: false  # indi_simulator_pac
+
+# More drivers, started after the simulators: any other executable in the
+# image, or a device on another server as "device@host:port".
+extraDrivers: []
+
+server:
+  # Logging: 0 is quiet, 1 shows key events (-v), 2 adds message content
+  # (-vv), 3 adds the complete XML (-vvv).
+  verbose: 1
+  # Drop a client that falls this many MB behind (-m). CCD images are sent
+  # as BLOBs, so slow mobile links need some room.
+  maxQueueMB: 128
+  # How many times a crashed driver is restarted (-r).
+  maxRestarts: 10
+  # Any other indiserver flags, such as ["-d", "64"].
+  extraArgs: []
+
+service:
+  type: ClusterIP
+  port: 7624
+
+# Where clients reach the server from outside the cluster. A Kubernetes
+# Ingress only routes HTTP, so INDI's TCP port is published by
+# ingress-nginx's TCP proxy instead (see README.md). Used in NOTES.txt only.
+publicEndpoint:
+  host: indi.example.com
+  port: 7624
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

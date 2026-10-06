@@ -1,0 +1,19 @@
+apiVersion: v2
+name: indi-server-simulator
+description: An INDI server (indiserver) running simulated astronomy devices
+type: application
+home: https://github.com/torresj/indi-server-simulator-chart
+sources:
+  - https://github.com/torresj/indi-server-simulator-chart
+  - https://github.com/indilib/indi
+keywords:
+  - indi
+  - indiserver
+  - astronomy
+  - simulator
+
+# The chart version and the image tag. Bump both together, then push a
+# vX.Y.Z tag: CI checks that the three match, then publishes the image and
+# the chart.
+version: 0.1.0
+appVersion: "0.1.0"

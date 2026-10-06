@@ -1,0 +1,11 @@
+# An imaging rig: mount, main camera, guide camera, focuser, filter wheel and
+# rotator.
+#
+#   helm upgrade indi-server-simulator torresj/indi-server-simulator -n indi -f examples/imaging.yaml
+simulators:
+  telescope: true
+  ccd: true
+  guider: true
+  focuser: true
+  filterWheel: true
+  rotator: true

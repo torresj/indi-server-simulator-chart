@@ -1,0 +1,20 @@
+# Every simulator on. CI renders the chart with this file and runs the image
+# with the resulting arguments, which checks that each driver exists in the
+# image and runs.
+simulators:
+  telescope: true
+  ccd: true
+  focuser: true
+  filterWheel: true
+  guider: true
+  rotator: true
+  dome: true
+  rollOffRoof: true
+  gps: true
+  weather: true
+  lightPanel: true
+  dustCover: true
+  io: true
+  receiver: true
+  sqm: true
+  alignmentCorrection: true

@@ -1,0 +1,16 @@
+# A remote observatory: the imaging rig plus dome, weather station, GPS, dust
+# cover and flat panel.
+#
+#   helm upgrade indi-server-simulator torresj/indi-server-simulator -n indi -f examples/observatory.yaml
+simulators:
+  telescope: true
+  ccd: true
+  guider: true
+  focuser: true
+  filterWheel: true
+  rotator: true
+  dome: true
+  weather: true
+  gps: true
+  dustCover: true
+  lightPanel: true

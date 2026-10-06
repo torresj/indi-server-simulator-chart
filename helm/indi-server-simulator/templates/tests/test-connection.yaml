@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "indi-server-simulator.fullname" . }}-test-connection"
+  labels:
+    {{- include "indi-server-simulator.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  containers:
+    - name: get-properties
+      image: busybox:1.37
+      # Ask for every property and expect at least one definition back, which
+      # shows that the drivers answer, not just that the port is open. stdin
+      # stays open for 3 s so indiserver doesn't drop the client before the
+      # drivers reply.
+      command:
+        - sh
+        - -c
+        - >-
+          (echo '<getProperties version="1.7"/>'; sleep 3)
+          | timeout 10 nc {{ include "indi-server-simulator.fullname" . }} {{ .Values.service.port }}
+          | grep -q '<def'
+  restartPolicy: Never

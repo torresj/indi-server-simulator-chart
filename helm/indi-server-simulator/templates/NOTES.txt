@@ -1,0 +1,22 @@
+indiserver runs these drivers:
+{{- range fromJsonArray (include "indi-server-simulator.drivers" .) }}
+  - {{ . }}
+{{- end }}
+
+1. Inside the cluster, connect to:
+  {{ include "indi-server-simulator.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+2. From outside, once ingress-nginx publishes the TCP port (see README.md), connect to:
+  {{ .Values.publicEndpoint.host }}:{{ .Values.publicEndpoint.port }}
+
+  final client = IndiClient(host: '{{ .Values.publicEndpoint.host }}', port: {{ .Values.publicEndpoint.port }});
+  await client.connect();
+
+3. To reach it from your machine without the public port:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "indi-server-simulator.fullname" . }} 7624:{{ .Values.service.port }}
+
+4. To change the simulators, for example to add the dome:
+  helm upgrade {{ .Release.Name }} torresj/{{ .Chart.Name }} --namespace {{ .Release.Namespace }} --reuse-values --set simulators.dome=true
+
+5. To check that the drivers answer:
+  helm test {{ .Release.Name }} --namespace {{ .Release.Namespace }}

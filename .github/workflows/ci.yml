@@ -1,0 +1,116 @@
+name: ci
+
+# Every run lints the chart, builds the image and starts every simulator in
+# it. A vX.Y.Z tag also publishes the image and the chart; deploying is done
+# by hand with helm (see README.md).
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CHART: helm/indi-server-simulator
+  IMAGE: indi-server-simulator
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint the chart
+        run: |
+          helm lint --strict "$CHART"
+          for values in examples/*.yaml "$CHART"/ci/*.yaml; do
+            helm lint --strict "$CHART" -f "$values"
+          done
+
+      - name: Check that bad values are rejected
+        run: |
+          if helm template "$CHART" --set simulators.dom=true; then
+            echo "::error::An unknown simulator key passed the schema"
+            exit 1
+          fi
+          sed 's/: true/: false/' "$CHART/ci/all-simulators-values.yaml" > "$RUNNER_TEMP/no-simulators.yaml"
+          if helm template "$CHART" -f "$RUNNER_TEMP/no-simulators.yaml"; then
+            echo "::error::A server without drivers rendered"
+            exit 1
+          fi
+
+      - name: Build the image
+        run: docker build -t "$IMAGE:ci" .
+
+      - name: Show the INDI version
+        run: docker run --rm --entrypoint dpkg-query "$IMAGE:ci" -W indi-bin
+
+      # Runs the image with the exact arguments the chart renders, with every
+      # simulator on and the pod's read-only filesystem, then checks that
+      # every driver defines a device.
+      - name: Start every simulator
+        run: |
+          mapfile -t args < <(
+            helm template "$CHART" -f "$CHART/ci/all-simulators-values.yaml" \
+              --show-only templates/deployment.yaml \
+              | yq '.spec.template.spec.containers[0].args[]'
+          )
+          drivers=$(printf '%s\n' "${args[@]}" | grep -c '^indi_')
+          simulators=$(grep -c ': true' "$CHART/ci/all-simulators-values.yaml")
+          if [ "$drivers" -ne "$simulators" ]; then
+            echo "::error::$simulators simulators are on but $drivers drivers rendered; check the map in _helpers.tpl"
+            exit 1
+          fi
+
+          docker run -d --name indi --user 10001:10001 --read-only \
+            --tmpfs /tmp --tmpfs /home/indi -p 7624:7624 "$IMAGE:ci" "${args[@]}"
+          sleep 5
+          (echo '<getProperties version="1.7"/>'; sleep 5) \
+            | timeout 15 nc localhost 7624 > "$RUNNER_TEMP/properties.xml" || true
+          docker logs indi
+
+          grep -o 'device="[^"]*"' "$RUNNER_TEMP/properties.xml" | sort -u > "$RUNNER_TEMP/devices.txt"
+          {
+            echo "### Devices from $drivers drivers"
+            sed 's/^/- /' "$RUNNER_TEMP/devices.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
+          devices=$(wc -l < "$RUNNER_TEMP/devices.txt")
+          if [ "$devices" -lt "$drivers" ]; then
+            echo "::error::Only $devices devices answered for $drivers drivers"
+            exit 1
+          fi
+
+      - name: Check the release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(yq '.version' "$CHART/Chart.yaml")
+          app_version=$(yq '.appVersion' "$CHART/Chart.yaml")
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ] || [ "$version" != "$app_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME, chart version $version and appVersion $app_version must match"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Push the image
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          REGISTRY_URL: ${{ secrets.REGISTRY_URL }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY_URL" -u "$REGISTRY_USER" --password-stdin
+          docker tag "$IMAGE:ci" "$REGISTRY_URL/$IMAGE:$VERSION"
+          docker push "$REGISTRY_URL/$IMAGE:$VERSION"
+
+      - name: Push the chart to ChartMuseum
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          CHARTS_URL: ${{ secrets.CHARTS_URL }}
+          CHARTS_USER: ${{ secrets.CHARTS_USER }}
+          CHARTS_PASSWORD: ${{ secrets.CHARTS_PASSWORD }}
+        run: |
+          helm plugin install https://github.com/chartmuseum/helm-push --verify=false
+          helm repo add torresj "$CHARTS_URL" --username "$CHARTS_USER" --password "$CHARTS_PASSWORD"
+          helm cm-push "$CHART" torresj
