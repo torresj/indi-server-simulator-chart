@@ -15,5 +15,5 @@ keywords:
 # The chart version and the image tag. Bump both together, then push a
 # vX.Y.Z tag: CI checks that the three match, then publishes the image and
 # the chart.
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.2.0
+appVersion: "0.2.0"

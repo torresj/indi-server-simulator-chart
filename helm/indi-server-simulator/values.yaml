@@ -9,8 +9,7 @@ image:
   tag: ""
 
 imagePullSecrets: regcred
-# Keep the full name fixed: the ingress-nginx TCP entry
-# (k8s/ingress-nginx-tcp.yaml) points at the Service by this name.
+# Keep the full name fixed: the README and the install notes use it.
 nameOverride: "indi-server-simulator"
 fullnameOverride: "indi-server-simulator"
 
@@ -53,12 +52,16 @@ server:
   extraArgs: []
 
 service:
+  # ClusterIP keeps the server inside the cluster. LoadBalancer publishes it
+  # on an external IP; with MetalLB it can share the ingress controller's IP
+  # (see examples/metallb-shared-ip.yaml and README.md).
   type: ClusterIP
   port: 7624
+  annotations: {}
 
 # Where clients reach the server from outside the cluster. A Kubernetes
-# Ingress only routes HTTP, so INDI's TCP port is published by
-# ingress-nginx's TCP proxy instead (see README.md). Used in NOTES.txt only.
+# Ingress only routes HTTP, so INDI's TCP port is published with a
+# LoadBalancer Service instead (see service). Used in NOTES.txt only.
 publicEndpoint:
   host: indi.example.com
   port: 7624

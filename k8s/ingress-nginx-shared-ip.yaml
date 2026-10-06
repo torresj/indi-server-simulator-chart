@@ -1,0 +1,14 @@
+# Values for the ingress-nginx release (not for this chart). They let other
+# LoadBalancer Services, such as indi-server-simulator's, share the ingress
+# controller's external IP through MetalLB. Only the controller's Service
+# changes; the controller isn't restarted.
+#
+# Apply once, keeping the installed chart version (helm list -n ingress-nginx):
+#
+#   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+#   helm upgrade ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx \
+#     --version <installed chart version> --reuse-values -f k8s/ingress-nginx-shared-ip.yaml
+controller:
+  service:
+    annotations:
+      metallb.io/allow-shared-ip: public-ip

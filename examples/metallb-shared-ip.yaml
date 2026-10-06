@@ -1,0 +1,12 @@
+# Publish INDI's port on the ingress controller's external IP, shared through
+# MetalLB. The ingress controller's Service needs the same sharing key (see
+# k8s/ingress-nginx-shared-ip.yaml). Combine it with a simulator preset:
+#
+#   helm upgrade indi-server-simulator torresj/indi-server-simulator -n indi \
+#     -f examples/metallb-shared-ip.yaml --set publicEndpoint.host=indi.example.com
+service:
+  type: LoadBalancer
+  annotations:
+    metallb.io/allow-shared-ip: public-ip
+    # The ingress controller's external IP: kubectl get svc -n ingress-nginx
+    metallb.io/loadBalancerIPs: 203.0.113.10

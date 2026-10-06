@@ -48,7 +48,7 @@ Each value under `simulators` starts one INDI driver. The device names and inter
 | `sqm` | `indi_simulator_sqm` | SQM Simulator | none | off |
 | `alignmentCorrection` | `indi_simulator_pac` | Alignment Correction Simulator | auxiliary, polarAlignmentCorrection | off |
 
-`examples/` has two presets:
+`examples/` has two simulator presets, plus [`metallb-shared-ip.yaml`](examples/metallb-shared-ip.yaml) for [public access](#public-access-on-port-7624):
 - [`imaging.yaml`](examples/imaging.yaml): mount, main and guide cameras, focuser, filter wheel and rotator.
 - [`observatory.yaml`](examples/observatory.yaml): the imaging rig plus dome, weather, GPS, dust cover and light panel.
 
@@ -100,8 +100,9 @@ helm get values indi-server-simulator -n indi
 | `server.maxQueueMB` | `128` | Drops a client that falls this many MB behind (`-m`). CCD images are sent as BLOBs, so slow mobile links need room |
 | `server.maxRestarts` | `10` | How many times a crashed driver is restarted (`-r`) |
 | `server.extraArgs` | `[]` | Other indiserver flags, such as `["-d", "64"]` to drop streaming BLOBs for slow clients |
-| `service.type` / `service.port` | `ClusterIP` / `7624` | The in-cluster Service, `indi-server-simulator.indi.svc:7624` |
-| `publicEndpoint.host` / `.port` | `indi.example.com` / `7624` | The public address shown in the install notes; set it to your hostname. Exposing the port is a separate step (see below) |
+| `service.type` / `service.port` | `ClusterIP` / `7624` | The Service, `indi-server-simulator.indi.svc:7624` in the cluster. `LoadBalancer` publishes it on an external IP (see [Public access](#public-access-on-port-7624)) |
+| `service.annotations` | `{}` | Annotations for the Service, such as MetalLB's `metallb.io/allow-shared-ip` and `metallb.io/loadBalancerIPs` |
+| `publicEndpoint.host` / `.port` | `indi.example.com` / `7624` | The public address shown in the install notes; set it to your hostname. It doesn't publish anything by itself |
 | `image.repository` / `.tag` / `.pullPolicy` | `registry.torresj.es/indi-server-simulator` / chart `appVersion` / `IfNotPresent` | The image |
 | `imagePullSecrets` | `regcred` | Pull secret for the private registry |
 | `resources` | requests `50m`/`64Mi`, limits `500m`/`512Mi` | The CCD simulator needs the most, while it renders images |
@@ -112,27 +113,38 @@ There's always exactly one replica, and updates use the `Recreate` strategy. The
 
 ## Public access on port 7624
 
-A Kubernetes `Ingress` only routes HTTP, and INDI is XML over raw TCP. Instead, ingress-nginx proxies the TCP port itself, on the external IP of its LoadBalancer Service; point your hostname's DNS record at that IP. The mapping belongs to the ingress-nginx release, not to this chart, and [`k8s/ingress-nginx-tcp.yaml`](k8s/ingress-nginx-tcp.yaml) holds it. Apply it once, passing the chart version that's already installed (`helm list -n ingress-nginx` shows it):
+A Kubernetes `Ingress` can't publish INDI. It only routes HTTP, choosing a backend from each request's `Host` header or TLS server name. An INDI client sends neither: it resolves the hostname, opens a plain TCP socket to that IP on port 7624, and sends XML. Whatever listens on that IP and port gets every connection, whichever name the client used.
 
-```sh
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
-helm upgrade ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx \
-  --version <installed chart version> --reuse-values -f k8s/ingress-nginx-tcp.yaml
-```
+So the chart publishes the port with a `LoadBalancer` Service instead (`service.type: LoadBalancer`). On a cluster with spare external IPs that's all it takes. On a cluster with a single public IP, which the ingress controller already holds, MetalLB can share that IP between the two Services:
+- The two Services carry the same `metallb.io/allow-shared-ip` key and use different ports (80 and 443, then 7624).
+- Both keep the default `Cluster` external traffic policy.
+- INDI traffic goes straight to the pod; nginx isn't involved.
 
-- **What it does.** The ingress-nginx chart creates the `ingress-nginx-tcp` ConfigMap and passes it to the controller with `--tcp-services-configmap`. It also adds port 7624 to the controller's LoadBalancer Service.
-- **Version.** `--version` keeps the installed controller version, so the command changes nothing else.
-- **Restart.** The controller pod is replaced, so the HTTP sites on the cluster can blip for a few seconds.
+1. Add the sharing key to the ingress controller's Service, once. [`k8s/ingress-nginx-shared-ip.yaml`](k8s/ingress-nginx-shared-ip.yaml) holds it. Pass the chart version that's already installed (`helm list -n ingress-nginx` shows it), so only that Service's annotation changes and the controller isn't restarted:
 
-Then check it from outside the cluster:
+   ```sh
+   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+   helm repo update
+   helm upgrade ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx \
+     --version <installed chart version> --reuse-values -f k8s/ingress-nginx-shared-ip.yaml
+   ```
 
-```sh
-nc -vz indi.example.com 7624
-cd ../dart-indi && dart run example/main.dart indi.example.com 7624   # lists devices, slews, takes an image
-```
+2. Switch this release to a `LoadBalancer` Service on that IP. Copy [`examples/metallb-shared-ip.yaml`](examples/metallb-shared-ip.yaml), set `metallb.io/loadBalancerIPs` to the ingress controller's external IP (`kubectl get svc -n ingress-nginx`), and upgrade:
 
-If the connection times out, check that the server's firewall allows port 7624. To use another public port or namespace, change `k8s/ingress-nginx-tcp.yaml` and `publicEndpoint`.
+   ```sh
+   helm upgrade indi-server-simulator torresj/indi-server-simulator -n indi --reset-then-reuse-values \
+     -f my-shared-ip.yaml --set publicEndpoint.host=indi.example.com
+   kubectl get svc -n indi indi-server-simulator   # EXTERNAL-IP shows the shared IP
+   ```
+
+3. Point the hostname's DNS record at that IP, then check from outside the cluster:
+
+   ```sh
+   nc -vz indi.example.com 7624
+   cd ../dart-indi && dart run example/main.dart indi.example.com 7624   # lists devices, slews, takes an image
+   ```
+
+If the connection times out, check that the server's firewall allows port 7624. To publish another port, change `service.port` and `publicEndpoint.port`.
 
 ## The image
 

@@ -6,8 +6,14 @@ indiserver runs these drivers:
 1. Inside the cluster, connect to:
   {{ include "indi-server-simulator.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
 
-2. From outside, once ingress-nginx publishes the TCP port (see README.md), connect to:
+2. From outside the cluster, connect to:
   {{ .Values.publicEndpoint.host }}:{{ .Values.publicEndpoint.port }}
+{{- if eq .Values.service.type "LoadBalancer" }}
+  Its DNS record must point at the Service's external IP:
+  kubectl get svc --namespace {{ .Release.Namespace }} {{ include "indi-server-simulator.fullname" . }}
+{{- else }}
+  This needs service.type=LoadBalancer first (see README.md).
+{{- end }}
 
   final client = IndiClient(host: '{{ .Values.publicEndpoint.host }}', port: {{ .Values.publicEndpoint.port }});
   await client.connect();
