@@ -1,0 +1,13 @@
+# Values for the Traefik release (not for this chart), the cluster's ingress
+# controller. They let other LoadBalancer Services, such as
+# indi-server-simulator's, share Traefik's external IP through MetalLB. Only
+# Traefik's Service changes; Traefik isn't restarted.
+#
+# Apply once, keeping the installed chart version (helm list -n traefik):
+#
+#   helm repo add traefik https://traefik.github.io/charts
+#   helm upgrade traefik traefik/traefik -n traefik \
+#     --version <installed chart version> --reuse-values -f k8s/traefik-shared-ip.yaml
+service:
+  annotations:
+    metallb.io/allow-shared-ip: public-ip

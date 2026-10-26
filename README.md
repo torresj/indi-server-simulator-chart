@@ -118,18 +118,18 @@ A Kubernetes `Ingress` can't publish INDI. It only routes HTTP, choosing a backe
 So the chart publishes the port with a `LoadBalancer` Service instead (`service.type: LoadBalancer`). On a cluster with spare external IPs that's all it takes. On a cluster with a single public IP, which the ingress controller already holds, MetalLB can share that IP between the two Services:
 - The two Services carry the same `metallb.io/allow-shared-ip` key and use different ports (80 and 443, then 7624).
 - Both keep the default `Cluster` external traffic policy.
-- INDI traffic goes straight to the pod; nginx isn't involved.
+- INDI traffic goes straight to the pod; the ingress controller isn't involved.
 
-1. Add the sharing key to the ingress controller's Service, once. [`k8s/ingress-nginx-shared-ip.yaml`](k8s/ingress-nginx-shared-ip.yaml) holds it. Pass the chart version that's already installed (`helm list -n ingress-nginx` shows it), so only that Service's annotation changes and the controller isn't restarted:
+1. Add the sharing key to the ingress controller's Service, once. The controller is Traefik. [`k8s/traefik-shared-ip.yaml`](k8s/traefik-shared-ip.yaml) holds the key. Pass the chart version that's already installed (`helm list -n traefik` shows it), so only that Service's annotation changes and Traefik isn't restarted:
 
    ```sh
-   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+   helm repo add traefik https://traefik.github.io/charts
    helm repo update
-   helm upgrade ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx \
-     --version <installed chart version> --reuse-values -f k8s/ingress-nginx-shared-ip.yaml
+   helm upgrade traefik traefik/traefik -n traefik \
+     --version <installed chart version> --reuse-values -f k8s/traefik-shared-ip.yaml
    ```
 
-2. Switch this release to a `LoadBalancer` Service on that IP. Copy [`examples/metallb-shared-ip.yaml`](examples/metallb-shared-ip.yaml), set `metallb.io/loadBalancerIPs` to the ingress controller's external IP (`kubectl get svc -n ingress-nginx`), and upgrade:
+2. Switch this release to a `LoadBalancer` Service on that IP. Copy [`examples/metallb-shared-ip.yaml`](examples/metallb-shared-ip.yaml), set `metallb.io/loadBalancerIPs` to the ingress controller's external IP (`kubectl get svc -n traefik`), and upgrade:
 
    ```sh
    helm upgrade indi-server-simulator torresj/indi-server-simulator -n indi --reset-then-reuse-values \
